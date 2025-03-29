@@ -1,4 +1,5 @@
-FROM golang:1.22-alpine AS builder
+# Build stage
+FROM golang:1.22-bookworm AS builder
 
 WORKDIR /app
 
@@ -14,11 +15,16 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=1 GOOS=linux go build -a -o shorter ./cmd/app
 
-# Use a smaller image for the final build
-FROM alpine:latest
+# Final stage
+FROM debian:bookworm-slim
 
-# SQLite dependencies and bash for our startup script
-RUN apk add --no-cache libc6-compat bash
+# Install necessary dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    sqlite3 \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -45,5 +51,5 @@ ENV DATABASE_URL=/app/data/shorter.db
 # Expose the port
 EXPOSE 8080
 
-# Run the startup script instead of directly running the binary
-CMD ["/app/start.sh"] 
+# Run the startup script
+CMD ["/app/start.sh"]
