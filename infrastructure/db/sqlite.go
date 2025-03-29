@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"github.com/prasetyowira/shorter/infrastructure/cache"
 	"time"
 
 	"github.com/prasetyowira/shorter/constant"
@@ -15,7 +16,8 @@ import (
 
 // SQLiteRepository implements shortener.Repository interface
 type SQLiteRepository struct {
-	db *gorm.DB
+	db    *gorm.DB
+	cache *cache.NamespaceLRU
 }
 
 // URLModel is the GORM model for URL entity
@@ -104,7 +106,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 }
 
 // NewSQLiteRepository creates a new SQLite repository
-func NewSQLiteRepository(dbPath string) (*SQLiteRepository, error) {
+func NewSQLiteRepository(dbPath string, cacheObj *cache.NamespaceLRU) (*SQLiteRepository, error) {
 	ctx := appLogger.NewRequestContext()
 
 	appLogger.CtxDebug(ctx, "Opening SQLite database", appLogger.LoggerInfo{
@@ -154,7 +156,7 @@ func NewSQLiteRepository(dbPath string) (*SQLiteRepository, error) {
 		},
 	})
 
-	return &SQLiteRepository{db: db}, nil
+	return &SQLiteRepository{db: db, cache: cacheObj}, nil
 }
 
 // Store persists a URL to the database
@@ -346,6 +348,15 @@ func (r *SQLiteRepository) IncrementVisits(ctx context.Context, shortCode string
 				constant.DataRowsAffected: result.RowsAffected,
 			},
 		})
+		// Get url obj from cache
+		urlObj, found := r.cache.Get(constant.ShortURLNamespace, shortCode)
+		if found {
+			if url, ok := urlObj.(*shortener.URL); ok {
+				url.Visits++
+				// Update the cache
+				r.cache.Set(constant.ShortURLNamespace, shortCode, url)
+			}
+		}
 	}
 
 	return nil

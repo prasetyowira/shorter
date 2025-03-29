@@ -28,6 +28,7 @@ type CreateShortURLRequest struct {
 
 // ShortURLResponse is the response object for short URL operations
 type ShortURLResponse struct {
+	FullUrl   string `json:"full_url"`
 	ShortCode string `json:"short_code"`
 	LongURL   string `json:"long_url"`
 }
@@ -128,6 +129,7 @@ func (h *Handler) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := ShortURLResponse{
+		FullUrl:   h.baseURL + "/" + url.ShortCode,
 		ShortCode: url.ShortCode,
 		LongURL:   url.LongURL,
 	}

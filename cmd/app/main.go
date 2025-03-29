@@ -3,11 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
-
 	"github.com/prasetyowira/shorter/api"
 	"github.com/prasetyowira/shorter/config"
 	"github.com/prasetyowira/shorter/constant"
@@ -16,6 +11,10 @@ import (
 	"github.com/prasetyowira/shorter/infrastructure/db"
 	appLogger "github.com/prasetyowira/shorter/infrastructure/logger"
 	"github.com/prasetyowira/shorter/infrastructure/qrcode"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
 )
 
 func main() {
@@ -26,7 +25,6 @@ func main() {
 	isProduction := cfg.LogLevel == "INFO"
 	appLogger.Initialize(isProduction)
 	defer appLogger.Close()
-
 	appLogger.Info(constant.MsgApplicationStarting, appLogger.LoggerInfo{
 		ContextFunction: constant.CtxMain,
 		Data: map[string]interface{}{
@@ -36,8 +34,9 @@ func main() {
 		},
 	})
 
-	// Create SQLite repository
-	repository, err := db.NewSQLiteRepository(cfg.DatabaseURL)
+	cacheLRU := cache.NewNamespaceLRU(cfg.CacheSize)
+	//Create SQLite repository
+	repository, err := db.NewSQLiteRepository(cfg.DatabaseURL, cacheLRU)
 	if err != nil {
 		appLogger.Fatal(constant.MsgFailedToInitDB, appLogger.LoggerInfo{
 			ContextFunction: constant.CtxMain,
@@ -53,7 +52,6 @@ func main() {
 	}
 	defer repository.Close()
 
-	cacheLRU := cache.NewNamespaceLRU(cfg.CacheSize)
 	// Create shortener service
 	service := shortener.NewService(repository, cacheLRU)
 
