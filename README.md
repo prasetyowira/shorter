@@ -28,6 +28,7 @@ A simple, efficient URL shortener service built with Go and Chi router.
 - `GET /{shortCode}` - Redirect to the original URL
 - `GET /api/urls/{shortCode}/stats` - Get URL statistics
 - `GET /api/urls/{shortCode}/qrcode` - Generate a QR code for the short URL
+- `PUT /api/urls/{shortCode}` - Update the long URL for a short code (protected with Basic Auth)
 - `GET /health` - Health check endpoint
 
 ## Installation & Setup
@@ -150,6 +151,23 @@ curl -X GET http://localhost:8080/api/urls/abc123/qrcode --output qrcode.png
 ```
 
 This returns a PNG image of a QR code that, when scanned, redirects to the original URL.
+
+### Update a Long URL
+
+```bash
+curl -X PUT http://localhost:8080/api/urls/abc123 \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{"long_url": "https://example.com/updated/url"}'
+```
+
+Response:
+```json
+{
+  "short_code": "abc123",
+  "long_url": "https://example.com/updated/url"
+}
+```
 
 ## Logging
 

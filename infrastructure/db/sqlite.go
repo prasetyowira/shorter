@@ -314,7 +314,7 @@ func (r *SQLiteRepository) FindByShortCode(ctx context.Context, shortCode string
 	}, nil
 }
 
-// IncrementVisits increments the visit count for a short code
+// IncrementVisits increments the visit count for a URL
 func (r *SQLiteRepository) IncrementVisits(ctx context.Context, shortCode string) error {
 	result := r.db.Exec(`UPDATE url_models SET visits = visits + 1 WHERE short_code = ?`, shortCode)
 
@@ -358,6 +358,90 @@ func (r *SQLiteRepository) IncrementVisits(ctx context.Context, shortCode string
 			}
 		}
 	}
+
+	return nil
+}
+
+// UpdateLongURL updates the long URL for an existing short code
+func (r *SQLiteRepository) UpdateLongURL(ctx context.Context, shortCode string, newLongURL string) error {
+	appLogger.CtxDebug(ctx, "Updating long URL in database", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			constant.DataLongURL:   newLongURL,
+		},
+	})
+
+	// Check if shortcode exists
+	var count int64
+	err := r.db.Raw(`SELECT COUNT(*) FROM url_models WHERE short_code = ?`, shortCode).Count(&count).Error
+	if err != nil {
+		appLogger.CtxError(ctx, "Error checking for existing short code", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeDBCheckExists,
+				Message: err.Error(),
+				Type:    constant.ErrTypeDB,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+			},
+		})
+		return err
+	}
+
+	if count == 0 {
+		appLogger.CtxWarn(ctx, "Short code not found", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeShortCodeNotFound,
+				Message: constant.ErrShortCodeNotFound,
+				Type:    constant.ErrTypeDB,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+			},
+		})
+		return errors.New(constant.ErrShortCodeNotFound)
+	}
+
+	// Update the long URL
+	result := r.db.Exec(`UPDATE url_models SET long_url = ? WHERE short_code = ?`, newLongURL, shortCode)
+	if result.Error != nil {
+		appLogger.CtxError(ctx, "Failed to update long URL in database", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeUpdateFailure,
+				Message: result.Error.Error(),
+				Type:    constant.ErrTypeDB,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+				constant.DataLongURL:   newLongURL,
+			},
+		})
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		appLogger.CtxWarn(ctx, "No rows updated", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+				constant.DataRowsAffected: 0,
+			},
+		})
+		return errors.New(constant.ErrShortCodeNotFound)
+	}
+
+	appLogger.CtxInfo(ctx, "Long URL updated successfully in database", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			constant.DataLongURL:   newLongURL,
+			constant.DataRowsAffected: result.RowsAffected,
+		},
+	})
 
 	return nil
 }

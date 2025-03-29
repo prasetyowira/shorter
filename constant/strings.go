@@ -16,6 +16,7 @@ const (
 	CtxDomain         = "domain"
 	CtxCreateShortURL = "CreateShortURL"
 	CtxGetLongURL     = "GetLongURL"
+	CtxUpdateLongURL  = "UpdateLongURL"
 
 	// Infrastructure context names
 	CtxDB              = "db"
@@ -95,6 +96,7 @@ const (
 	RouteShortCodeRedirect = "/{shortCode}"
 	RouteURLStats          = "/api/urls/{shortCode}/stats"
 	RouteQRCode            = "/api/urls/{shortCode}/qrcode"
+	RouteUpdateLongURL     = "/api/urls/{shortCode}"
 	RouteHealthcheck       = "/health"
 )
 

@@ -24,6 +24,7 @@ type Repository interface {
 	Store(ctx context.Context, url *URL) error
 	FindByShortCode(ctx context.Context, shortCode string) (*URL, error)
 	IncrementVisits(ctx context.Context, shortCode string) error
+	UpdateLongURL(ctx context.Context, shortCode string, newLongURL string) error
 }
 
 // Service represents the domain service for URL shortening
@@ -223,6 +224,92 @@ func (s *Service) GetLongURL(ctx context.Context, shortCode string) (*URL, error
 			constant.DataShortCode: shortCode,
 			constant.DataLongURL:   url.LongURL,
 			constant.DataVisits:    url.Visits,
+		},
+	})
+
+	return url, nil
+}
+
+// UpdateLongURL updates the long URL for an existing short code
+func (s *Service) UpdateLongURL(ctx context.Context, shortCode, newLongURL string) (*URL, error) {
+	logger.CtxDebug(ctx, "Updating long URL", logger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			constant.DataLongURL:   newLongURL,
+		},
+	})
+
+	if shortCode == "" {
+		logger.CtxWarn(ctx, "Short code cannot be empty", logger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &logger.CustomError{
+				Code:    constant.ErrCodeEmptyShortCode,
+				Message: constant.ErrEmptyShortCode,
+				Type:    constant.ErrTypeValidation,
+			},
+		})
+		return nil, errors.New(constant.ErrEmptyShortCode)
+	}
+
+	if newLongURL == "" {
+		logger.CtxWarn(ctx, "Long URL cannot be empty", logger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &logger.CustomError{
+				Code:    constant.ErrCodeEmptyLongURL,
+				Message: constant.ErrEmptyLongURL,
+				Type:    constant.ErrTypeValidation,
+			},
+		})
+		return nil, errors.New(constant.ErrEmptyLongURL)
+	}
+
+	// First check if the short code exists
+	url, err := s.repo.FindByShortCode(ctx, shortCode)
+	if err != nil {
+		logger.CtxWarn(ctx, "Failed to find URL by short code", logger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &logger.CustomError{
+				Code:    constant.ErrCodeShortCodeNotFound,
+				Message: err.Error(),
+				Type:    constant.ErrTypeRetrieval,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+			},
+		})
+		return nil, err
+	}
+
+	// Update the long URL
+	err = s.repo.UpdateLongURL(ctx, shortCode, newLongURL)
+	if err != nil {
+		logger.CtxError(ctx, "Failed to update long URL", logger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &logger.CustomError{
+				Code:    constant.ErrCodeUpdateFailure,
+				Message: err.Error(),
+				Type:    constant.ErrTypeStorage,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+				constant.DataLongURL:   newLongURL,
+			},
+		})
+		return nil, err
+	}
+
+	// Update the URL object with the new long URL
+	url.LongURL = newLongURL
+
+	// Update the cache
+	s.cache.Set(constant.ShortURLNamespace, shortCode, url)
+
+	logger.CtxInfo(ctx, "URL successfully updated", logger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			constant.DataLongURL:   newLongURL,
 		},
 	})
 

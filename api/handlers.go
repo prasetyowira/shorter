@@ -39,6 +39,11 @@ type URLStatsResponse struct {
 	Visits    uint   `json:"visits"`
 }
 
+// UpdateLongURLRequest is the request object for UpdateLongURL endpoint
+type UpdateLongURLRequest struct {
+	LongURL string `json:"long_url"`
+}
+
 // ErrorResponse represents an API error response
 type ErrorResponse struct {
 	Error string `json:"error"`
@@ -331,6 +336,95 @@ func (h *Handler) GenerateQRCode(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(qrCode)))
 	w.WriteHeader(http.StatusOK)
 	w.Write(qrCode)
+}
+
+// UpdateLongURL handles updating the long URL for an existing short code
+func (h *Handler) UpdateLongURL(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	shortCode := chi.URLParam(r, "shortCode")
+
+	appLogger.CtxDebug(ctx, "Processing URL update request", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+		},
+	})
+
+	var req UpdateLongURLRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		appLogger.CtxError(ctx, "Error decoding request body", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeAPIDecodeRequest,
+				Message: err.Error(),
+				Type:    constant.ErrTypeAPI,
+			},
+		})
+
+		WriteJSONError(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	if req.LongURL == "" {
+		appLogger.CtxWarn(ctx, "Empty long URL in update request", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeEmptyLongURL,
+				Message: constant.ErrEmptyLongURL,
+				Type:    constant.ErrTypeValidation,
+			},
+		})
+
+		WriteJSONError(w, "Long URL cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	url, err := h.service.UpdateLongURL(ctx, shortCode, req.LongURL)
+	if err != nil {
+		if err.Error() == constant.ErrShortCodeNotFound {
+			appLogger.CtxInfo(ctx, "Short code not found for update", appLogger.LoggerInfo{
+				ContextFunction: constant.CtxUpdateLongURL,
+				Data: map[string]interface{}{
+					constant.DataShortCode: shortCode,
+				},
+			})
+
+			http.NotFound(w, r)
+			return
+		}
+
+		appLogger.CtxError(ctx, "Error updating URL", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxUpdateLongURL,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeAPIServiceError,
+				Message: err.Error(),
+				Type:    constant.ErrTypeAPI,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+				constant.DataLongURL:   req.LongURL,
+			},
+		})
+
+		WriteJSONError(w, "Failed to update URL", http.StatusInternalServerError)
+		return
+	}
+
+	resp := ShortURLResponse{
+		FullUrl:   h.baseURL + "/" + url.ShortCode,
+		ShortCode: url.ShortCode,
+		LongURL:   url.LongURL,
+	}
+
+	appLogger.CtxInfo(ctx, "URL updated successfully", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxUpdateLongURL,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			constant.DataLongURL:   req.LongURL,
+		},
+	})
+
+	WriteJSON(w, resp, http.StatusOK)
 }
 
 // WriteJSON writes a JSON response

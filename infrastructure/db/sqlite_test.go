@@ -2,13 +2,13 @@ package db
 
 import (
 	"context"
-	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/prasetyowira/shorter/constant"
 	"github.com/prasetyowira/shorter/domain/shortener"
+	"github.com/prasetyowira/shorter/infrastructure/cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,7 +27,8 @@ func cleanupTestDB(t *testing.T) {
 func createTestRepository(t *testing.T) *SQLiteRepository {
 	cleanupTestDB(t)
 	
-	repo, err := NewSQLiteRepository(testDBPath)
+	cacheLRU := cache.NewNamespaceLRU(100)
+	repo, err := NewSQLiteRepository(testDBPath, cacheLRU)
 	if err != nil {
 		t.Fatalf("Failed to create test repository: %v", err)
 	}
@@ -40,7 +41,8 @@ func TestNewSQLiteRepository(t *testing.T) {
 	defer cleanupTestDB(t)
 	
 	// Act
-	repo, err := NewSQLiteRepository(testDBPath)
+	cacheLRU := cache.NewNamespaceLRU(100)
+	repo, err := NewSQLiteRepository(testDBPath, cacheLRU)
 	
 	// Assert
 	assert.NoError(t, err)
@@ -54,7 +56,8 @@ func TestNewSQLiteRepository(t *testing.T) {
 
 func TestNewSQLiteRepository_InvalidPath(t *testing.T) {
 	// Act - Try to create a repository with an invalid path
-	repo, err := NewSQLiteRepository("/invalid/path/db.sqlite")
+	cacheLRU := cache.NewNamespaceLRU(100)
+	repo, err := NewSQLiteRepository("/invalid/path/db.sqlite", cacheLRU)
 	
 	// Assert
 	assert.Error(t, err)
@@ -80,7 +83,14 @@ func TestSQLiteRepository_Store(t *testing.T) {
 	
 	// Assert
 	assert.NoError(t, err)
-	assert.NotZero(t, url.ID) // ID should be set by the repository
+	
+	// Verify that the URL was stored correctly
+	foundURL, err := repo.FindByShortCode(ctx, url.ShortCode)
+	assert.NoError(t, err)
+	assert.NotNil(t, foundURL)
+	assert.Equal(t, url.LongURL, foundURL.LongURL)
+	assert.Equal(t, url.ShortCode, foundURL.ShortCode)
+	assert.Equal(t, url.Visits, foundURL.Visits)
 }
 
 func TestSQLiteRepository_Store_DuplicateShortCode(t *testing.T) {
@@ -220,6 +230,55 @@ func TestSQLiteRepository_Close(t *testing.T) {
 	
 	// Assert
 	assert.NoError(t, err)
+}
+
+func TestSQLiteRepository_UpdateLongURL(t *testing.T) {
+	// Arrange
+	repo := createTestRepository(t)
+	defer cleanupTestDB(t)
+	defer repo.Close()
+	ctx := context.Background()
+	
+	// Create a URL to update
+	originalURL := &shortener.URL{
+		LongURL:   "https://example.com",
+		ShortCode: "abc123",
+		CreatedAt: time.Now().Truncate(time.Second),
+		Visits:    0,
+	}
+	
+	err := repo.Store(ctx, originalURL)
+	assert.NoError(t, err)
+	
+	// Act - Update the long URL
+	newLongURL := "https://example.com/updated"
+	err = repo.UpdateLongURL(ctx, originalURL.ShortCode, newLongURL)
+	
+	// Assert
+	assert.NoError(t, err)
+	
+	// Verify that the URL was updated
+	foundURL, err := repo.FindByShortCode(ctx, originalURL.ShortCode)
+	assert.NoError(t, err)
+	assert.NotNil(t, foundURL)
+	assert.Equal(t, newLongURL, foundURL.LongURL)
+	assert.Equal(t, originalURL.ShortCode, foundURL.ShortCode)
+	assert.Equal(t, originalURL.Visits, foundURL.Visits)
+}
+
+func TestSQLiteRepository_UpdateLongURL_NonexistentShortCode(t *testing.T) {
+	// Arrange
+	repo := createTestRepository(t)
+	defer cleanupTestDB(t)
+	defer repo.Close()
+	ctx := context.Background()
+	
+	// Act - Try to update a nonexistent short code
+	err := repo.UpdateLongURL(ctx, "nonexistent", "https://example.com/updated")
+	
+	// Assert
+	assert.Error(t, err)
+	assert.Equal(t, constant.ErrShortCodeNotFound, err.Error())
 }
 
 func TestGormLogger_LogMode(t *testing.T) {

@@ -14,6 +14,9 @@ const (
 	
 	// Shortener service - Stats errors (4xx)
 	ErrCodeIncrementVisits = "SVC005"
+
+	// Shortener service - Update errors (5xx)
+	ErrCodeUpdateFailure = "SVC006"
 )
 
 // Database error codes

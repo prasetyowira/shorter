@@ -45,10 +45,16 @@ func (r *Router) SetupRoutes() {
 	creds := map[string]string{
 		r.username: r.password,
 	}
-	// API routes
+	// API routes with Basic Auth
 	r.router.With(
 		middleware.BasicAuth("shorter", creds),
 	).Post(constant.RouteCreateShortURL, r.handler.CreateShortURL)
+
+	r.router.With(
+		middleware.BasicAuth("shorter", creds),
+	).Put(constant.RouteUpdateLongURL, r.handler.UpdateLongURL)
+
+	// Public routes
 	r.router.Get(constant.RouteShortCodeRedirect, r.handler.RedirectToLongURL)
 	r.router.Get(constant.RouteURLStats, r.handler.GetURLStats)
 	r.router.Get(constant.RouteQRCode, r.handler.GenerateQRCode)
