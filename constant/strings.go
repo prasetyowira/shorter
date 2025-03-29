@@ -30,6 +30,7 @@ const (
 	CtxMain              = "Main"
 	CtxRedirectToLongURL = "RedirectToLongURL"
 	CtxGetURLStats       = "GetURLStats"
+	CtxGenerateQRCode    = "GenerateQRCode"
 )
 
 // Data field keys
@@ -93,6 +94,7 @@ const (
 	RouteCreateShortURL    = "/api/urls"
 	RouteShortCodeRedirect = "/{shortCode}"
 	RouteURLStats          = "/api/urls/{shortCode}/stats"
+	RouteQRCode            = "/api/urls/{shortCode}/qrcode"
 	RouteHealthcheck       = "/health"
 )
 

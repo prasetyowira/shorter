@@ -30,34 +30,44 @@ func (m *MockHandler) GetURLStats(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (m *MockHandler) GenerateQRCode(w http.ResponseWriter, r *http.Request) {
+	m.Called(w, r)
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "image/png")
+	w.Write([]byte("fake-qr-code-data"))
+}
+
 func TestNewRouter(t *testing.T) {
 	// Arrange
 	mockHandler := new(MockHandler)
+	username := "admin"
+	password := "password"
 	
 	// Act
-	router := NewRouter(mockHandler)
+	router := NewRouter(mockHandler, username, password)
 	
 	// Assert
 	assert.NotNil(t, router)
 	assert.Equal(t, mockHandler, router.handler)
 	assert.NotNil(t, router.router)
 	assert.IsType(t, &chi.Mux{}, router.router)
+	assert.Equal(t, username, router.username)
+	assert.Equal(t, password, router.password)
 }
 
 func TestRouter_SetupRoutes(t *testing.T) {
 	// Arrange
 	mockHandler := new(MockHandler)
-	router := NewRouter(mockHandler)
+	router := NewRouter(mockHandler, "admin", "password")
 	
 	// Act
 	router.SetupRoutes()
 	
-	// Testing POST /api/urls
-	mockHandler.On("CreateShortURL", mock.Anything, mock.Anything).Once()
+	// Testing POST /api/urls - Requires authentication, will fail without auth
 	req := httptest.NewRequest("POST", "/api/urls", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	
 	// Testing GET /{shortCode}
 	mockHandler.On("RedirectToLongURL", mock.Anything, mock.Anything).Once()
@@ -72,6 +82,14 @@ func TestRouter_SetupRoutes(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+	
+	// Testing GET /api/urls/{shortCode}/qrcode
+	mockHandler.On("GenerateQRCode", mock.Anything, mock.Anything).Once()
+	req = httptest.NewRequest("GET", "/api/urls/abc123/qrcode", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "image/png", w.Header().Get("Content-Type"))
 	
 	// Testing healthcheck route
 	req = httptest.NewRequest("GET", "/health", nil)

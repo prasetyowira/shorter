@@ -51,6 +51,7 @@ func (r *Router) SetupRoutes() {
 	).Post(constant.RouteCreateShortURL, r.handler.CreateShortURL)
 	r.router.Get(constant.RouteShortCodeRedirect, r.handler.RedirectToLongURL)
 	r.router.Get(constant.RouteURLStats, r.handler.GetURLStats)
+	r.router.Get(constant.RouteQRCode, r.handler.GenerateQRCode)
 
 	// Healthcheck
 	r.router.Get(constant.RouteHealthcheck, func(w http.ResponseWriter, r *http.Request) {

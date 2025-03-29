@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
@@ -45,7 +46,6 @@ func TestNewSQLiteRepository(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, repo)
 	assert.NotNil(t, repo.db)
-	assert.NotNil(t, repo.ctx)
 	
 	// Clean up
 	err = repo.Close()
@@ -66,6 +66,7 @@ func TestSQLiteRepository_Store(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	url := &shortener.URL{
 		LongURL:   "https://example.com",
@@ -75,7 +76,7 @@ func TestSQLiteRepository_Store(t *testing.T) {
 	}
 	
 	// Act
-	err := repo.Store(url)
+	err := repo.Store(ctx, url)
 	
 	// Assert
 	assert.NoError(t, err)
@@ -87,6 +88,7 @@ func TestSQLiteRepository_Store_DuplicateShortCode(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	url1 := &shortener.URL{
 		LongURL:   "https://example.com",
@@ -103,8 +105,8 @@ func TestSQLiteRepository_Store_DuplicateShortCode(t *testing.T) {
 	}
 	
 	// Act
-	err1 := repo.Store(url1)
-	err2 := repo.Store(url2)
+	err1 := repo.Store(ctx, url1)
+	err2 := repo.Store(ctx, url2)
 	
 	// Assert
 	assert.NoError(t, err1)
@@ -117,6 +119,7 @@ func TestSQLiteRepository_FindByShortCode(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	originalURL := &shortener.URL{
 		LongURL:   "https://example.com",
@@ -125,11 +128,11 @@ func TestSQLiteRepository_FindByShortCode(t *testing.T) {
 		Visits:    0,
 	}
 	
-	err := repo.Store(originalURL)
+	err := repo.Store(ctx, originalURL)
 	assert.NoError(t, err)
 	
 	// Act
-	foundURL, err := repo.FindByShortCode(originalURL.ShortCode)
+	foundURL, err := repo.FindByShortCode(ctx, originalURL.ShortCode)
 	
 	// Assert
 	assert.NoError(t, err)
@@ -145,9 +148,10 @@ func TestSQLiteRepository_FindByShortCode_NotFound(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	// Act
-	foundURL, err := repo.FindByShortCode("nonexistent")
+	foundURL, err := repo.FindByShortCode(ctx, "nonexistent")
 	
 	// Assert
 	assert.Error(t, err)
@@ -160,6 +164,7 @@ func TestSQLiteRepository_IncrementVisits(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	originalURL := &shortener.URL{
 		LongURL:   "https://example.com",
@@ -168,25 +173,25 @@ func TestSQLiteRepository_IncrementVisits(t *testing.T) {
 		Visits:    0,
 	}
 	
-	err := repo.Store(originalURL)
+	err := repo.Store(ctx, originalURL)
 	assert.NoError(t, err)
 	
 	// Act - Increment visits
-	err = repo.IncrementVisits(originalURL.ShortCode)
+	err = repo.IncrementVisits(ctx, originalURL.ShortCode)
 	assert.NoError(t, err)
 	
 	// Assert - Verify that visits were incremented
-	foundURL, err := repo.FindByShortCode(originalURL.ShortCode)
+	foundURL, err := repo.FindByShortCode(ctx, originalURL.ShortCode)
 	assert.NoError(t, err)
 	assert.NotNil(t, foundURL)
 	assert.Equal(t, uint(1), foundURL.Visits)
 	
 	// Act - Increment again
-	err = repo.IncrementVisits(originalURL.ShortCode)
+	err = repo.IncrementVisits(ctx, originalURL.ShortCode)
 	assert.NoError(t, err)
 	
 	// Assert - Verify visits incremented to 2
-	foundURL, err = repo.FindByShortCode(originalURL.ShortCode)
+	foundURL, err = repo.FindByShortCode(ctx, originalURL.ShortCode)
 	assert.NoError(t, err)
 	assert.Equal(t, uint(2), foundURL.Visits)
 }
@@ -196,9 +201,10 @@ func TestSQLiteRepository_IncrementVisits_NonexistentShortCode(t *testing.T) {
 	repo := createTestRepository(t)
 	defer cleanupTestDB(t)
 	defer repo.Close()
+	ctx := context.Background()
 	
 	// Act
-	err := repo.IncrementVisits("nonexistent")
+	err := repo.IncrementVisits(ctx, "nonexistent")
 	
 	// Assert
 	assert.NoError(t, err) // Should not return error, just log warning

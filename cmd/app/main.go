@@ -15,6 +15,7 @@ import (
 	"github.com/prasetyowira/shorter/infrastructure/cache"
 	"github.com/prasetyowira/shorter/infrastructure/db"
 	appLogger "github.com/prasetyowira/shorter/infrastructure/logger"
+	"github.com/prasetyowira/shorter/infrastructure/qrcode"
 )
 
 func main() {
@@ -56,8 +57,11 @@ func main() {
 	// Create shortener service
 	service := shortener.NewService(repository, cacheLRU)
 
+	// Create QR code generator
+	qrGenerator := qrcode.NewGenerator(cfg.BaseURL)
+
 	// Create API handler and router
-	handler := api.NewHandler(service)
+	handler := api.NewHandler(service, qrGenerator, cfg.BaseURL)
 	router := api.NewRouter(handler, cfg.AuthUser, cfg.AuthPass)
 	router.SetupRoutes()
 

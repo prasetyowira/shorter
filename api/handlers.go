@@ -3,17 +3,21 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/prasetyowira/shorter/constant"
 	"github.com/prasetyowira/shorter/domain/shortener"
 	appLogger "github.com/prasetyowira/shorter/infrastructure/logger"
+	"github.com/prasetyowira/shorter/infrastructure/qrcode"
 )
 
 // Handler contains service dependencies for API handlers
 type Handler struct {
-	service *shortener.Service
+	service     *shortener.Service
+	qrGenerator *qrcode.Generator
+	baseURL     string
 }
 
 // CreateShortURLRequest is the request object for CreateShortURL endpoint
@@ -41,9 +45,11 @@ type ErrorResponse struct {
 }
 
 // NewHandler creates a new API handler
-func NewHandler(service *shortener.Service) *Handler {
+func NewHandler(service *shortener.Service, qrGenerator *qrcode.Generator, baseURL string) *Handler {
 	return &Handler{
-		service: service,
+		service:     service,
+		qrGenerator: qrGenerator,
+		baseURL:     baseURL,
 	}
 }
 
@@ -246,6 +252,83 @@ func (h *Handler) GetURLStats(w http.ResponseWriter, r *http.Request) {
 	})
 
 	WriteJSON(w, resp, http.StatusOK)
+}
+
+// GenerateQRCode handles QR code generation for a short URL
+func (h *Handler) GenerateQRCode(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	shortCode := chi.URLParam(r, "shortCode")
+
+	appLogger.CtxDebug(ctx, "Processing QR code generation request", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxGenerateQRCode,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+		},
+	})
+
+	// Verify that the short code exists
+	_, err := h.service.GetLongURL(ctx, shortCode)
+	if err != nil {
+		if err.Error() == constant.ErrShortCodeNotFound {
+			appLogger.CtxInfo(ctx, "Short code not found for QR code generation", appLogger.LoggerInfo{
+				ContextFunction: constant.CtxGenerateQRCode,
+				Data: map[string]interface{}{
+					constant.DataShortCode: shortCode,
+				},
+			})
+
+			http.NotFound(w, r)
+			return
+		}
+
+		appLogger.CtxError(ctx, "Error retrieving URL for QR code", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxGenerateQRCode,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeAPIServiceError,
+				Message: err.Error(),
+				Type:    constant.ErrTypeAPI,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+			},
+		})
+
+		WriteJSONError(w, "Error generating QR code", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate QR code
+	qrCode, err := h.qrGenerator.GenerateQRCode(shortCode, 256)
+	if err != nil {
+		appLogger.CtxError(ctx, "Failed to generate QR code", appLogger.LoggerInfo{
+			ContextFunction: constant.CtxGenerateQRCode,
+			Error: &appLogger.CustomError{
+				Code:    constant.ErrCodeAPIServiceError,
+				Message: err.Error(),
+				Type:    constant.ErrTypeAPI,
+			},
+			Data: map[string]interface{}{
+				constant.DataShortCode: shortCode,
+			},
+		})
+
+		WriteJSONError(w, "Failed to generate QR code", http.StatusInternalServerError)
+		return
+	}
+
+	appLogger.CtxInfo(ctx, "QR code generated successfully", appLogger.LoggerInfo{
+		ContextFunction: constant.CtxGenerateQRCode,
+		Data: map[string]interface{}{
+			constant.DataShortCode: shortCode,
+			"qr_size":              len(qrCode),
+		},
+	})
+
+	// Set appropriate headers and write the image data
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Length", strconv.Itoa(len(qrCode)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(qrCode)
 }
 
 // WriteJSON writes a JSON response
